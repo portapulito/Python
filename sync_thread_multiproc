@@ -1,0 +1,68 @@
+import time
+import threading
+from queue import Queue
+from multiprocessing import Process
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+from dirsync import sync
+
+DEBOUNCE_SECONDS = 2
+event_queue = Queue()
+active_timers = {}
+
+def sincronizza_cartelle(sorgente: str, destinazione: str):
+    try:
+        sync(sorgente, destinazione, 'sync', purge=True)
+        print(f" {time.strftime('%H:%M:%S')} - {sorgente} → {destinazione}")
+    except Exception as e:
+        print(f" Errore: {e}")
+
+def lancio_processi():
+    while True:
+        sorgente, destinazione = event_queue.get()
+        p = Process(target=sincronizza_cartelle, args=(sorgente, destinazione))
+        p.daemon = True  # Avvio senza bloccare il thread
+        p.start()
+        event_queue.task_done()
+
+# Avvio del thread che consuma dalla coda
+threading.Thread(target=lancio_processi, daemon=True).start()
+
+class SmartEventHandler(FileSystemEventHandler):
+    def __init__(self, sorgente: str, destinazione: str):
+        self.sorgente = sorgente
+        self.destinazione = destinazione
+
+    def on_any_event(self, event):
+        key = (self.sorgente, self.destinazione)
+
+        # Se c'è un debounce attivo, lo annulliamo
+        if key in active_timers:
+            active_timers[key].cancel()
+
+        def trigger():
+            event_queue.put(key)
+            del active_timers[key]  # Cleanup timer
+
+        timer = threading.Timer(DEBOUNCE_SECONDS, trigger)
+        active_timers[key] = timer
+        timer.start()
+
+if __name__ == "__main__":
+    dir_a = "source_folder_path"  # Sostituisci con il percorso della tua cartella sorgente
+    dir_b = "target_folder_path"  # Sostituisci con il percorso della tua cartella di destinazione
+
+    observer = Observer()
+    observer.schedule(SmartEventHandler(dir_a, dir_b), path=dir_a, recursive=True)
+    observer.schedule(SmartEventHandler(dir_b, dir_a), path=dir_b, recursive=True)
+
+    observer.start()
+    print(" Sincronizzazione con threading + multiprocessing attiva.")
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+        print(" Terminazione richiesta.")
+    observer.join()
