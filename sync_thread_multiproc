@@ -42,15 +42,15 @@ class SmartEventHandler(FileSystemEventHandler):
 
         def trigger():
             event_queue.put(key)
-            del active_timers[key]  # Cleanup timer
+            del active_timers[key]  
 
         timer = threading.Timer(DEBOUNCE_SECONDS, trigger)
         active_timers[key] = timer
         timer.start()
 
 if __name__ == "__main__":
-    dir_a = "source_folder_path"  # Sostituisci con il percorso della tua cartella sorgente
-    dir_b = "target_folder_path"  # Sostituisci con il percorso della tua cartella di destinazione
+    dir_a = "source_folder_path"  e
+    dir_b = "target_folder_path"  
 
     observer = Observer()
     observer.schedule(SmartEventHandler(dir_a, dir_b), path=dir_a, recursive=True)
